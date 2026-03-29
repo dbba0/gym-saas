@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import type { AuthRequest } from "../middleware/auth";
 import type { Response } from "express";
@@ -67,10 +68,11 @@ export async function reserveClass(req: AuthRequest, res: Response) {
     return res.status(404).json({ message: "Class not found" });
   }
 
-  const existingReservation = classSession.reservations.find(
-    (reservation) => reservation.memberId === member.id && reservation.status === "RESERVED"
-  );
-  if (existingReservation) {
+  const existingReservation = classSession.reservations.find((reservation) => reservation.memberId === member.id);
+  if (
+    existingReservation &&
+    (existingReservation.status === "RESERVED" || existingReservation.status === "CHECKED_IN")
+  ) {
     return res.status(409).json({ message: "Class already reserved" });
   }
 
@@ -81,10 +83,25 @@ export async function reserveClass(req: AuthRequest, res: Response) {
     return res.status(409).json({ message: "Class is full" });
   }
 
-  const reservation = await prisma.classReservation.create({
-    data: { classId, memberId: member.id }
-  });
-  return res.status(201).json(reservation);
+  try {
+    if (existingReservation) {
+      const reservation = await prisma.classReservation.update({
+        where: { id: existingReservation.id },
+        data: { status: "RESERVED" }
+      });
+      return res.status(201).json(reservation);
+    }
+
+    const reservation = await prisma.classReservation.create({
+      data: { classId, memberId: member.id }
+    });
+    return res.status(201).json(reservation);
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return res.status(409).json({ message: "Class already reserved" });
+    }
+    throw error;
+  }
 }
 
 export async function cancelReservation(req: AuthRequest, res: Response) {
