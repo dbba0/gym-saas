@@ -4,6 +4,9 @@ import {
   assignProgramToMember,
   createProgram,
   deleteProgram,
+  listMemberAvailablePrograms,
+  listMemberPrograms,
+  listProgramAssignableMembers,
   listPrograms,
   updateProgram
 } from "../controllers/programController";
@@ -21,6 +24,9 @@ const router = Router();
 router.use(requireAuth, requireGymContext);
 
 router.get("/", requireRole("ADMIN", "COACH", "MEMBER"), listPrograms);
+router.get("/available", requireRole("MEMBER"), listMemberAvailablePrograms);
+router.get("/mine", requireRole("MEMBER"), listMemberPrograms);
+router.get("/:id/assignable-members", requireRole("ADMIN", "COACH"), listProgramAssignableMembers);
 router.post("/", requireRole("ADMIN", "COACH"), validate(createProgramSchema), createProgram);
 router.patch("/:id", requireRole("ADMIN", "COACH"), validate(updateProgramSchema), updateProgram);
 router.post(

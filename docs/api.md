@@ -42,6 +42,9 @@ Base URL (example): `https://api-staging.your-domain.com/api`
 
 ## Programs
 - `GET /programs` (ADMIN, COACH, MEMBER)
+- `GET /programs/available` (MEMBER)
+- `GET /programs/mine` (MEMBER)
+- `GET /programs/:id/assignable-members` (ADMIN, COACH)
 - `POST /programs` (ADMIN, COACH)
 - `PATCH /programs/:id` (ADMIN, COACH)
 - `POST /programs/:id/exercises` (ADMIN, COACH owner)

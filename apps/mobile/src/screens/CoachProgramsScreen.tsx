@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import Screen from "../components/Screen";
 import Card from "../components/Card";
@@ -20,9 +20,32 @@ type Member = {
   lastName: string;
 };
 
+type AssignableMember = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  isAssigned: boolean;
+  sessionsDone: number;
+  startedAt: string | null;
+  statusLabel: string;
+};
+
+type AssignableMembersResponse = {
+  programId: string;
+  assignedMemberId: string | null;
+  members: AssignableMember[];
+};
+
+function initials(firstName: string, lastName: string) {
+  const a = firstName.trim().charAt(0).toUpperCase();
+  const b = lastName.trim().charAt(0).toUpperCase();
+  return `${a}${b}`;
+}
+
 export default function CoachProgramsScreen() {
   const [programs, setPrograms] = useState<Program[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
+
   const [createOpen, setCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [title, setTitle] = useState("");
@@ -32,7 +55,6 @@ export default function CoachProgramsScreen() {
   const [exerciseSets, setExerciseSets] = useState("3");
   const [exerciseReps, setExerciseReps] = useState("10");
   const [exerciseRest, setExerciseRest] = useState("60");
-  const [assigningProgramId, setAssigningProgramId] = useState<string | null>(null);
 
   const [exerciseProgramId, setExerciseProgramId] = useState<string | null>(null);
   const [addingExercise, setAddingExercise] = useState(false);
@@ -40,6 +62,13 @@ export default function CoachProgramsScreen() {
   const [extraExerciseSets, setExtraExerciseSets] = useState("3");
   const [extraExerciseReps, setExtraExerciseReps] = useState("10");
   const [extraExerciseRest, setExtraExerciseRest] = useState("60");
+
+  const [assignViewProgramId, setAssignViewProgramId] = useState<string | null>(null);
+  const [assignMembers, setAssignMembers] = useState<AssignableMember[]>([]);
+  const [assignSearch, setAssignSearch] = useState("");
+  const [loadingAssignMembers, setLoadingAssignMembers] = useState(false);
+  const [assignError, setAssignError] = useState<string | null>(null);
+  const [assigningTargetKey, setAssigningTargetKey] = useState<string | null>(null);
 
   const loadData = () => {
     Promise.all([apiGet<Program[]>("/programs"), apiGet<Member[]>("/members")])
@@ -50,9 +79,33 @@ export default function CoachProgramsScreen() {
       .catch(() => null);
   };
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  const loadAssignableMembers = async (programId: string) => {
+    try {
+      setLoadingAssignMembers(true);
+      setAssignError(null);
+      const payload = await apiGet<AssignableMembersResponse>(`/programs/${programId}/assignable-members`);
+      setAssignMembers(payload.members || []);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to load members.";
+      setAssignError(message);
+    } finally {
+      setLoadingAssignMembers(false);
+    }
+  };
+
+  const openAssignView = async (programId: string) => {
+    if (assignViewProgramId === programId) {
+      setAssignViewProgramId(null);
+      setAssignSearch("");
+      setAssignMembers([]);
+      setAssignError(null);
+      return;
+    }
+
+    setAssignViewProgramId(programId);
+    setAssignSearch("");
+    await loadAssignableMembers(programId);
+  };
 
   const createProgram = async () => {
     if (!title.trim()) {
@@ -114,16 +167,18 @@ export default function CoachProgramsScreen() {
     }
   };
 
-  const assignProgram = async (programId: string, memberId: string | null) => {
+  const assignProgram = async (programId: string, memberId: string) => {
     try {
-      setAssigningProgramId(programId);
+      const key = `${programId}:${memberId}`;
+      setAssigningTargetKey(key);
       await apiPatch(`/programs/${programId}/assign`, { memberId });
-      loadData();
+      await Promise.all([loadData(), loadAssignableMembers(programId)]);
+      Alert.alert("Assigné", "Le programme a été assigné au membre.");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to assign this program.";
       Alert.alert("Assign failed", message);
     } finally {
-      setAssigningProgramId(null);
+      setAssigningTargetKey(null);
     }
   };
 
@@ -173,6 +228,21 @@ export default function CoachProgramsScreen() {
       setAddingExercise(false);
     }
   };
+
+  const filteredAssignMembers = useMemo(() => {
+    const query = assignSearch.trim().toLowerCase();
+    if (!query) {
+      return assignMembers;
+    }
+    return assignMembers.filter((member) => {
+      const label = `${member.firstName} ${member.lastName} ${member.statusLabel}`.toLowerCase();
+      return label.includes(query);
+    });
+  }, [assignMembers, assignSearch]);
+
+  useEffect(() => {
+    loadData();
+  }, []);
 
   return (
     <Screen>
@@ -272,27 +342,67 @@ export default function CoachProgramsScreen() {
             </Text>
             <Text style={styles.programMeta}>Exercises: {item.exercises?.length || 0}</Text>
 
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsRow}>
-              <TouchableOpacity
-                style={[styles.chip, !item.memberId && styles.chipActive]}
-                onPress={() => assignProgram(item.id, null)}
-                disabled={assigningProgramId === item.id}
-              >
-                <Text style={[styles.chipText, !item.memberId && styles.chipTextActive]}>Unassign</Text>
-              </TouchableOpacity>
-              {members.map((member) => (
-                <TouchableOpacity
-                  key={`${item.id}-${member.id}`}
-                  style={[styles.chip, item.memberId === member.id && styles.chipActive]}
-                  onPress={() => assignProgram(item.id, member.id)}
-                  disabled={assigningProgramId === item.id}
-                >
-                  <Text style={[styles.chipText, item.memberId === member.id && styles.chipTextActive]}>
-                    {member.firstName}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
+            <TouchableOpacity
+              style={[styles.secondaryButton, assignViewProgramId === item.id && styles.secondaryButtonActive]}
+              onPress={() => openAssignView(item.id)}
+            >
+              <Text style={styles.secondaryButtonText}>
+                {assignViewProgramId === item.id ? "Close assignment" : "Assign to member"}
+              </Text>
+            </TouchableOpacity>
+
+            {assignViewProgramId === item.id && (
+              <View style={styles.assignPanel}>
+                <Text style={styles.assignTitle}>Assigner à un membre</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Rechercher un membre..."
+                  value={assignSearch}
+                  onChangeText={setAssignSearch}
+                />
+                {loadingAssignMembers ? <Text style={styles.programMeta}>Loading members...</Text> : null}
+                {assignError ? <Text style={styles.errorText}>{assignError}</Text> : null}
+
+                {filteredAssignMembers.map((member) => {
+                  const isLoadingThis = assigningTargetKey === `${item.id}:${member.id}`;
+                  return (
+                    <View key={`${item.id}:${member.id}`} style={styles.memberRow}>
+                      <View style={styles.memberIdentity}>
+                        <View style={styles.avatar}>
+                          <Text style={styles.avatarText}>{initials(member.firstName, member.lastName)}</Text>
+                        </View>
+                        <View style={styles.memberTextWrap}>
+                          <Text style={styles.memberName}>{member.firstName} {member.lastName}</Text>
+                          <Text style={styles.memberStatus}>{member.statusLabel}</Text>
+                        </View>
+                      </View>
+
+                      {member.isAssigned ? (
+                        <View style={styles.assignedBadge}>
+                          <Text style={styles.assignedBadgeText}>✓ Assigné</Text>
+                        </View>
+                      ) : (
+                        <TouchableOpacity
+                          style={[styles.assignButton, isLoadingThis && styles.buttonDisabled]}
+                          onPress={() => assignProgram(item.id, member.id)}
+                          disabled={isLoadingThis}
+                        >
+                          <Text style={styles.assignButtonText}>{isLoadingThis ? "..." : "Assigner"}</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  );
+                })}
+
+                {!loadingAssignMembers && filteredAssignMembers.length === 0 ? (
+                  <Text style={styles.programMeta}>No managed member found.</Text>
+                ) : null}
+
+                <Text style={styles.assignmentHint}>
+                  Le membre verra ce programme dans "Mes programmes".
+                </Text>
+              </View>
+            )}
 
             <TouchableOpacity
               style={[styles.secondaryButton, exerciseProgramId === item.id && styles.secondaryButtonActive]}
@@ -345,6 +455,7 @@ export default function CoachProgramsScreen() {
             )}
           </Card>
         ))}
+
         {programs.length === 0 && (
           <Card tone="program">
             <Text style={styles.programMeta}>No programs created yet.</Text>
@@ -458,5 +569,88 @@ const styles = StyleSheet.create({
   },
   addExerciseBox: {
     marginTop: 10
+  },
+  assignPanel: {
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: "#ddd6c8",
+    borderRadius: 14,
+    padding: 10,
+    backgroundColor: "#fff"
+  },
+  assignTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    marginBottom: 8
+  },
+  memberRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#efe8dc"
+  },
+  memberIdentity: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
+    paddingRight: 8
+  },
+  avatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 999,
+    backgroundColor: "#e8ebff",
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  avatarText: {
+    fontWeight: "700",
+    color: "#334155"
+  },
+  memberTextWrap: {
+    flex: 1
+  },
+  memberName: {
+    fontWeight: "700",
+    color: colors.ink
+  },
+  memberStatus: {
+    color: "#4b5563",
+    fontSize: 12
+  },
+  assignButton: {
+    borderWidth: 1,
+    borderColor: "#d1cabf",
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: "#fff"
+  },
+  assignButtonText: {
+    fontWeight: "700",
+    color: colors.ink
+  },
+  assignedBadge: {
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: "#dff4e9"
+  },
+  assignedBadgeText: {
+    fontWeight: "700",
+    color: "#1f7a4f"
+  },
+  assignmentHint: {
+    marginTop: 10,
+    color: "#5f6775",
+    fontSize: 12
+  },
+  errorText: {
+    color: "#b91c1c",
+    fontWeight: "600",
+    marginBottom: 8
   }
 });

@@ -104,7 +104,7 @@ export async function createMemberAttendance(req: AuthRequest, res: Response) {
       where: {
         id: programId,
         gymId: req.auth.gymId,
-        memberId: member.id
+        OR: [{ memberId: member.id }, { isPublic: true, memberId: null }]
       },
       select: { id: true }
     });
@@ -116,6 +116,7 @@ export async function createMemberAttendance(req: AuthRequest, res: Response) {
   const attendance = await prisma.attendance.create({
     data: {
       memberId: member.id,
+      programId: programId || null,
       source: "MANUAL",
       scannedByUserId: req.auth.userId
     }

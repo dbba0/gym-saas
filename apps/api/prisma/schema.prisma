@@ -188,6 +188,7 @@ model Program {
   gymId       String
   coachId     String?
   memberId    String?
+  isPublic    Boolean  @default(false)
   title       String
   description String?
   createdAt   DateTime @default(now())
@@ -197,6 +198,7 @@ model Program {
   coach       Coach?   @relation(fields: [coachId], references: [id])
   member      Member?  @relation(fields: [memberId], references: [id])
   exercises   Exercise[]
+  attendances Attendance[]
 
   @@index([gymId])
   @@index([coachId])
@@ -266,13 +268,16 @@ model PaymentWebhookEvent {
 model Attendance {
   id              String   @id @default(uuid())
   memberId        String
+  programId       String?
   checkedInAt     DateTime @default(now())
   source          AttendanceSource @default(QR)
   scannedByUserId String?
 
   member          Member  @relation(fields: [memberId], references: [id])
+  program         Program? @relation(fields: [programId], references: [id])
 
   @@index([memberId])
+  @@index([programId])
   @@map("attendance")
 }
 

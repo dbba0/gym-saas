@@ -11,6 +11,7 @@ export const createProgramSchema = z.object({
   body: z.object({
     coachId: z.string().optional(),
     memberId: z.string().optional(),
+    isPublic: z.boolean().optional(),
     title: z.string().min(2),
     description: z.string().optional(),
     exercises: z.array(exerciseSchema).optional()
@@ -20,7 +21,8 @@ export const createProgramSchema = z.object({
 export const updateProgramSchema = z.object({
   body: z.object({
     title: z.string().min(2).optional(),
-    description: z.string().optional()
+    description: z.string().optional(),
+    isPublic: z.boolean().optional()
   })
 });
 

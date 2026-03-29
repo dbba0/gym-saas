@@ -7,6 +7,7 @@ import { adminGet, adminPatch, adminPost } from "../../lib/adminClient";
 type Program = {
   id: string;
   title: string;
+  isPublic: boolean;
   coach?: { name: string } | null;
   member?: { id: string; firstName: string; lastName: string } | null;
   exercises?: Array<{ id: string; name: string }>;
@@ -18,6 +19,7 @@ const FALLBACK_PROGRAMS: Program[] = [
   {
     id: "1",
     title: "Strength Starter",
+    isPublic: true,
     coach: { name: "Coach K" },
     member: { id: "m1", firstName: "Awa", lastName: "Diop" },
     exercises: [{ id: "e1", name: "Squat" }, { id: "e2", name: "Bench" }]
@@ -30,6 +32,7 @@ export default function ProgramsPage() {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [assigningProgramId, setAssigningProgramId] = useState<string | null>(null);
+  const [visibilityProgramId, setVisibilityProgramId] = useState<string | null>(null);
   const [assignmentByProgram, setAssignmentByProgram] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -103,6 +106,32 @@ export default function ProgramsPage() {
     }
   };
 
+  const toggleVisibility = async (program: Program) => {
+    setError(null);
+    setSuccess(null);
+    try {
+      setVisibilityProgramId(program.id);
+      const updated = await adminPatch<Program>(`/programs/${program.id}`, {
+        isPublic: !program.isPublic
+      });
+      setPrograms((current) =>
+        current.map((item) =>
+          item.id === program.id
+            ? {
+                ...item,
+                ...updated
+              }
+            : item
+        )
+      );
+      setSuccess(`Program set to ${updated.isPublic ? "Public" : "Prive"}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update visibility.");
+    } finally {
+      setVisibilityProgramId(null);
+    }
+  };
+
   return (
     <div className="app-shell">
       <Sidebar active="/programs" />
@@ -162,6 +191,21 @@ export default function ProgramsPage() {
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
                 <span className="badge">{program.exercises?.length || 0} exercises</span>
+                <span className={`badge ${program.isPublic ? "badge-active" : "badge-neutral"}`}>
+                  {program.isPublic ? "Public" : "Prive"}
+                </span>
+                <button
+                  className="btn ghost"
+                  type="button"
+                  disabled={visibilityProgramId === program.id}
+                  onClick={() => toggleVisibility(program)}
+                >
+                  {visibilityProgramId === program.id
+                    ? "Updating..."
+                    : program.isPublic
+                      ? "Passer en prive"
+                      : "Passer en public"}
+                </button>
                 <select
                   className="input"
                   style={{ width: 220, maxWidth: "100%" }}

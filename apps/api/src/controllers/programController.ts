@@ -1,6 +1,9 @@
 import { prisma } from "../lib/prisma";
 import type { AuthRequest } from "../middleware/auth";
 import type { Response } from "express";
+import { listAvailableProgramsForMember } from "../services/programVisibility";
+import { getMemberPrograms } from "../services/memberPrograms";
+import { getProgramAssignableMembers } from "../services/programAssignment";
 
 async function getAuthenticatedCoachId(req: AuthRequest) {
   if (!req.auth?.gymId) {
@@ -36,7 +39,14 @@ export async function listPrograms(req: AuthRequest, res: Response) {
     if (!coach) {
       return res.json([]);
     }
-    where = { ...where, coachId: coach.id };
+    where = {
+      gymId: req.auth.gymId,
+      OR: [
+        { coachId: coach.id },
+        { member: { coachId: coach.id } },
+        { isPublic: true, memberId: null }
+      ]
+    };
   }
 
   if (req.auth.role === "MEMBER") {
@@ -46,7 +56,10 @@ export async function listPrograms(req: AuthRequest, res: Response) {
     if (!member) {
       return res.json([]);
     }
-    where = { ...where, memberId: member.id };
+    where = {
+      gymId: req.auth.gymId,
+      OR: [{ memberId: member.id }, { isPublic: true, memberId: null }]
+    };
   }
 
   const programs = await prisma.program.findMany({
@@ -57,12 +70,53 @@ export async function listPrograms(req: AuthRequest, res: Response) {
   return res.json(programs);
 }
 
+export async function listMemberAvailablePrograms(req: AuthRequest, res: Response) {
+  if (!req.auth?.gymId) {
+    return res.status(400).json({ message: "Missing gym context" });
+  }
+
+  const payload = await listAvailableProgramsForMember(req.auth.gymId, req.auth.userId);
+  return res.json(payload);
+}
+
+export async function listMemberPrograms(req: AuthRequest, res: Response) {
+  if (!req.auth?.gymId) {
+    return res.status(400).json({ message: "Missing gym context" });
+  }
+
+  const payload = await getMemberPrograms(req.auth.gymId, req.auth.userId);
+  return res.json(payload);
+}
+
+export async function listProgramAssignableMembers(req: AuthRequest, res: Response) {
+  if (!req.auth?.gymId) {
+    return res.status(400).json({ message: "Missing gym context" });
+  }
+
+  const allowedCoachId =
+    req.auth.role === "COACH"
+      ? await getAuthenticatedCoachId(req)
+      : null;
+
+  if (req.auth.role === "COACH" && !allowedCoachId) {
+    return res.status(403).json({ message: "Coach profile not found" });
+  }
+
+  const payload = await getProgramAssignableMembers(req.auth.gymId, req.params.id, allowedCoachId);
+  if (!payload) {
+    return res.status(404).json({ message: "Program not found or access denied" });
+  }
+
+  return res.json(payload);
+}
+
 export async function createProgram(req: AuthRequest, res: Response) {
   if (!req.auth?.gymId) {
     return res.status(400).json({ message: "Missing gym context" });
   }
 
   const { title, description, memberId, exercises } = req.body;
+  const isPublic = req.auth.role === "ADMIN" ? Boolean(req.body.isPublic) : false;
   let coachId = req.body.coachId as string | undefined;
 
   if (req.auth.role === "COACH") {
@@ -73,6 +127,10 @@ export async function createProgram(req: AuthRequest, res: Response) {
       return res.status(403).json({ message: "Coach profile not found" });
     }
     coachId = coach?.id;
+  }
+
+  if (req.auth.role !== "ADMIN" && req.body.isPublic === true) {
+    return res.status(403).json({ message: "Only admins can publish programs." });
   }
 
   if (coachId) {
@@ -86,10 +144,14 @@ export async function createProgram(req: AuthRequest, res: Response) {
 
   if (memberId) {
     const member = await prisma.member.findFirst({
-      where: { id: memberId, gymId: req.auth.gymId }
+      where: { id: memberId, gymId: req.auth.gymId },
+      select: { id: true, coachId: true }
     });
     if (!member) {
       return res.status(400).json({ message: "Invalid member for this gym" });
+    }
+    if (req.auth.role === "COACH" && member.coachId !== coachId) {
+      return res.status(403).json({ message: "You can only assign your own members" });
     }
   }
 
@@ -98,6 +160,7 @@ export async function createProgram(req: AuthRequest, res: Response) {
       gymId: req.auth.gymId,
       coachId,
       memberId,
+      isPublic,
       title,
       description,
       exercises: exercises
@@ -138,6 +201,10 @@ export async function updateProgram(req: AuthRequest, res: Response) {
       return res.status(403).json({ message: "Forbidden" });
     }
     authenticatedCoachId = coach.id;
+  }
+
+  if (req.body.isPublic !== undefined && req.auth.role !== "ADMIN") {
+    return res.status(403).json({ message: "Only admins can change program visibility." });
   }
 
   if (req.body.coachId) {
@@ -262,7 +329,7 @@ export async function assignProgramToMember(req: AuthRequest, res: Response) {
 
   if (req.auth.role === "COACH") {
     const coachId = await getAuthenticatedCoachId(req);
-    if (!coachId || program.coachId !== coachId) {
+    if (!coachId || (program.coachId !== coachId && !program.isPublic)) {
       return res.status(403).json({ message: "Forbidden" });
     }
 
