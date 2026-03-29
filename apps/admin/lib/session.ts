@@ -1,7 +1,15 @@
-type JwtPayload = {
+export type JwtPayload = {
   exp?: number;
-  role?: string;
+  role?: "ADMIN" | "COACH" | "MEMBER";
 };
+
+export type ClientSession = {
+  accessToken: string;
+  refreshToken: string;
+};
+
+const ACCESS_TOKEN_KEY = "GYM_ADMIN_TOKEN";
+const REFRESH_TOKEN_KEY = "GYM_ADMIN_REFRESH_TOKEN";
 
 function decodeBase64Url(value: string) {
   const base64 = value.replace(/-/g, "+").replace(/_/g, "/");
@@ -27,4 +35,37 @@ export function isTokenExpired(token: string, skewSeconds = 15) {
     return true;
   }
   return payload.exp <= Math.floor(Date.now() / 1000) + skewSeconds;
+}
+
+export function readStoredSession(): ClientSession | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  try {
+    const accessToken = window.localStorage.getItem(ACCESS_TOKEN_KEY);
+    const refreshToken = window.localStorage.getItem(REFRESH_TOKEN_KEY);
+    if (!accessToken || !refreshToken) {
+      return null;
+    }
+    return { accessToken, refreshToken };
+  } catch {
+    return null;
+  }
+}
+
+export function writeStoredSession(session: ClientSession | null) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    if (!session) {
+      window.localStorage.removeItem(ACCESS_TOKEN_KEY);
+      window.localStorage.removeItem(REFRESH_TOKEN_KEY);
+      return;
+    }
+    window.localStorage.setItem(ACCESS_TOKEN_KEY, session.accessToken);
+    window.localStorage.setItem(REFRESH_TOKEN_KEY, session.refreshToken);
+  } catch {
+    // Ignore storage restrictions in privacy mode.
+  }
 }

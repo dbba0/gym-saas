@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api";
+import { getServerApiUrl } from "../../../../lib/serverApiUrl";
 
 async function forward(req: NextRequest, path: string[]) {
   if (!path?.length) {
     return NextResponse.json({ message: "Missing path" }, { status: 400 });
   }
 
+  const API_URL = getServerApiUrl();
   const query = req.nextUrl.search || "";
   const target = `${API_URL}/${path.join("/")}${query}`;
   const incomingAuth = req.headers.get("authorization");

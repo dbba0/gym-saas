@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api";
+import { getServerApiUrl } from "../../../../lib/serverApiUrl";
 
 async function fetchJson(path: string, authorization: string) {
+  const API_URL = getServerApiUrl();
   const response = await fetch(`${API_URL}${path}`, {
     cache: "no-store",
     headers: { Authorization: authorization }

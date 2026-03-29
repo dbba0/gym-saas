@@ -14,6 +14,9 @@ enum Role {
 }
 
 enum PaymentMethod {
+  WAVE
+  ORANGE_MONEY
+  FREE_MONEY
   MOBILE_MONEY
   CARD
   CASH
@@ -69,8 +72,27 @@ model User {
   gym           Gym?     @relation(fields: [gymId], references: [id])
   member        Member?
   coach         Coach?
+  refreshTokens RefreshToken[]
 
   @@map("users")
+}
+
+model RefreshToken {
+  id                 String    @id @default(uuid())
+  userId             String
+  tokenHash          String    @unique
+  expiresAt          DateTime
+  createdAt          DateTime  @default(now())
+  revokedAt          DateTime?
+  replacedByTokenHash String?
+  createdByIp        String?
+  userAgent          String?
+
+  user               User      @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
 }
 
 model Member {
@@ -204,6 +226,14 @@ model Payment {
   method         PaymentMethod
   paidAt         DateTime @default(now())
   status         String   @default("PAID")
+  provider       String   @default("INTERNAL")
+  providerReference String? @unique
+  providerPaymentId String?
+  checkoutUrl    String?
+  failureReason  String?
+  providerPayload Json?
+  confirmedAt    DateTime?
+  webhookEvents  PaymentWebhookEvent[]
 
   member         Member  @relation(fields: [memberId], references: [id])
   subscription   Subscription? @relation(fields: [subscriptionId], references: [id])
@@ -211,6 +241,26 @@ model Payment {
   @@index([memberId])
   @@index([subscriptionId])
   @@map("payments")
+}
+
+model PaymentWebhookEvent {
+  id                String   @id @default(uuid())
+  provider          String
+  eventKey          String
+  providerReference String?
+  status            String?
+  payloadHash       String
+  rawPayload        Json?
+  receivedAt        DateTime @default(now())
+  processedAt       DateTime?
+  paymentId         String?
+
+  payment           Payment? @relation(fields: [paymentId], references: [id])
+
+  @@unique([provider, eventKey])
+  @@index([providerReference])
+  @@index([paymentId])
+  @@map("payment_webhook_events")
 }
 
 model Attendance {

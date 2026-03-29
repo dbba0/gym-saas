@@ -107,9 +107,22 @@ export async function cancelReservation(req: AuthRequest, res: Response) {
     return res.status(403).json({ message: "Forbidden" });
   }
 
-  const updatedReservation = await prisma.classReservation.update({
-    where: { id: req.params.id },
+  await prisma.classReservation.updateMany({
+    where: {
+      id: req.params.id,
+      class: { gymId: req.auth.gymId }
+    },
     data: { status: "CANCELED" }
   });
+
+  const updatedReservation = await prisma.classReservation.findFirst({
+    where: {
+      id: req.params.id,
+      class: { gymId: req.auth.gymId }
+    }
+  });
+  if (!updatedReservation) {
+    return res.status(404).json({ message: "Reservation not found" });
+  }
   return res.json(updatedReservation);
 }

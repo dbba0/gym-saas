@@ -2,27 +2,41 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { getClientToken, setClientToken } from "../../lib/adminClient";
-import { isTokenExpired } from "../../lib/session";
+import { useRouter, useSearchParams } from "next/navigation";
+import { ensureAdminSession, getClientSession, setClientSession, setClientToken } from "../../lib/adminClient";
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const token = getClientToken();
-    if (token && !isTokenExpired(token)) {
-      router.replace("/");
+    ensureAdminSession().then((ok) => {
+      if (ok) {
+        router.replace("/");
+      } else if (getClientSession()) {
+        setClientToken(null);
+      }
+    });
+  }, [router]);
+
+  useEffect(() => {
+    const reason = searchParams.get("reason");
+    if (reason === "expired") {
+      setError("Your session expired. Please sign in again.");
       return;
     }
-    if (token) {
-      setClientToken(null);
+    if (reason === "forbidden") {
+      setError("Only ADMIN users can access this dashboard.");
+      return;
     }
-  }, [router]);
+    if (reason === "unauthorized") {
+      setError("Please sign in to continue.");
+    }
+  }, [searchParams]);
 
   const signIn = async (event: FormEvent) => {
     event.preventDefault();
@@ -59,11 +73,13 @@ export default function LoginPage() {
       if (payload?.user?.role !== "ADMIN") {
         throw new Error("Only ADMIN users can access this dashboard.");
       }
-      if (!payload?.token || isTokenExpired(payload.token)) {
-        throw new Error("Session expired. Please sign in again.");
+      const accessToken = payload?.accessToken || payload?.token;
+      const refreshToken = payload?.refreshToken;
+      if (!accessToken || !refreshToken) {
+        throw new Error("Invalid session payload from API.");
       }
 
-      setClientToken(payload.token || null);
+      setClientSession(accessToken, refreshToken);
       router.push("/");
       router.refresh();
     } catch (err) {

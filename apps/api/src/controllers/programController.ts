@@ -129,6 +129,7 @@ export async function updateProgram(req: AuthRequest, res: Response) {
     return res.status(404).json({ message: "Program not found" });
   }
 
+  let authenticatedCoachId: string | null = null;
   if (req.auth.role === "COACH") {
     const coach = await prisma.coach.findFirst({
       where: { userId: req.auth.userId, gymId: req.auth.gymId }
@@ -136,12 +137,46 @@ export async function updateProgram(req: AuthRequest, res: Response) {
     if (!coach || program.coachId !== coach.id) {
       return res.status(403).json({ message: "Forbidden" });
     }
+    authenticatedCoachId = coach.id;
   }
 
-  const updatedProgram = await prisma.program.update({
-    where: { id: req.params.id },
+  if (req.body.coachId) {
+    const coach = await prisma.coach.findFirst({
+      where: { id: req.body.coachId, gymId: req.auth.gymId },
+      select: { id: true }
+    });
+    if (!coach) {
+      return res.status(400).json({ message: "Invalid coach for this gym" });
+    }
+    if (req.auth.role === "COACH" && authenticatedCoachId !== coach.id) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+  }
+
+  if (req.body.memberId !== undefined && req.body.memberId !== null) {
+    const member = await prisma.member.findFirst({
+      where: { id: req.body.memberId, gymId: req.auth.gymId },
+      select: { id: true, coachId: true }
+    });
+    if (!member) {
+      return res.status(400).json({ message: "Invalid member for this gym" });
+    }
+    if (req.auth.role === "COACH" && member.coachId !== authenticatedCoachId) {
+      return res.status(403).json({ message: "You can only update your own members" });
+    }
+  }
+
+  await prisma.program.updateMany({
+    where: { id: req.params.id, gymId: req.auth.gymId },
     data: req.body
   });
+
+  const updatedProgram = await prisma.program.findFirst({
+    where: { id: req.params.id, gymId: req.auth.gymId }
+  });
+  if (!updatedProgram) {
+    return res.status(404).json({ message: "Program not found" });
+  }
   return res.json(updatedProgram);
 }
 
@@ -165,7 +200,9 @@ export async function deleteProgram(req: AuthRequest, res: Response) {
     }
   }
 
-  await prisma.program.delete({ where: { id: req.params.id } });
+  await prisma.program.deleteMany({
+    where: { id: req.params.id, gymId: req.auth.gymId }
+  });
   return res.status(204).send();
 }
 
@@ -251,11 +288,18 @@ export async function assignProgramToMember(req: AuthRequest, res: Response) {
     }
   }
 
-  const updatedProgram = await prisma.program.update({
-    where: { id: req.params.id },
-    data: { memberId },
+  await prisma.program.updateMany({
+    where: { id: req.params.id, gymId: req.auth.gymId },
+    data: { memberId }
+  });
+
+  const updatedProgram = await prisma.program.findFirst({
+    where: { id: req.params.id, gymId: req.auth.gymId },
     include: { exercises: true, coach: true, member: true }
   });
+  if (!updatedProgram) {
+    return res.status(404).json({ message: "Program not found" });
+  }
 
   return res.json(updatedProgram);
 }

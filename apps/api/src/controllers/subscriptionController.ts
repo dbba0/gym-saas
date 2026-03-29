@@ -100,10 +100,17 @@ export async function updateSubscription(req: AuthRequest, res: Response) {
     return res.status(404).json({ message: "Subscription not found" });
   }
 
-  const updatedSubscription = await prisma.subscription.update({
-    where: { id: req.params.id },
+  await prisma.subscription.updateMany({
+    where: { id: req.params.id, gymId: req.auth.gymId },
     data: req.body
   });
+
+  const updatedSubscription = await prisma.subscription.findFirst({
+    where: { id: req.params.id, gymId: req.auth.gymId }
+  });
+  if (!updatedSubscription) {
+    return res.status(404).json({ message: "Subscription not found" });
+  }
   return res.json(updatedSubscription);
 }
 
@@ -118,7 +125,9 @@ export async function deleteSubscription(req: AuthRequest, res: Response) {
     return res.status(404).json({ message: "Subscription not found" });
   }
 
-  await prisma.subscription.delete({ where: { id: req.params.id } });
+  await prisma.subscription.deleteMany({
+    where: { id: req.params.id, gymId: req.auth.gymId }
+  });
   return res.status(204).send();
 }
 

@@ -1,11 +1,13 @@
 # API Reference
 
-Base URL: `http://localhost:4000/api`
+Base URL (example): `https://api-staging.your-domain.com/api`
 
 ## Auth
 - `POST /auth/register-admin`
 - `POST /auth/register-user` (ADMIN)
 - `POST /auth/login`
+- `POST /auth/refresh`
+- `POST /auth/logout`
 - `GET /auth/me`
 
 ## Gyms
@@ -54,6 +56,11 @@ Base URL: `http://localhost:4000/api`
 ## Payments
 - `GET /payments` (ADMIN, MEMBER)
 - `POST /payments` (ADMIN)
+- `POST /payments/intents` (ADMIN, MEMBER)
+- `POST /payments/:id/confirm` (ADMIN, MEMBER)
+- `POST /payments/webhooks/paydunya` (public, signature requise)
+  - headers acceptes: `x-paydunya-secret` ou `x-paydunya-signature` (+ `x-paydunya-timestamp`)
+  - protections: signature invalide => `400`, replay event => `202 replayed`
 
 ## Attendance
 - `GET /attendance` (ADMIN, COACH, MEMBER -> MEMBER sees only own attendance)

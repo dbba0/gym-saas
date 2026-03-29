@@ -9,6 +9,7 @@ const exerciseSchema = z.object({
 
 export const createProgramSchema = z.object({
   body: z.object({
+    coachId: z.string().optional(),
     memberId: z.string().optional(),
     title: z.string().min(2),
     description: z.string().optional(),

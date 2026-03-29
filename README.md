@@ -64,6 +64,15 @@ npm run dev:mobile
 - Build pipeline demo: `npm run demo:deploy`
 - Smoke test role flows (API): `bash scripts/manual-role-flow.sh`
 
+## Staging public (preparation)
+- Guide complet: `docs/staging-deploy.md`
+- Script preflight staging: `npm run staging:prepare`
+- Setup DB staging (Prisma): `npm run staging:db:setup`
+- Build staging: `npm run build:staging`
+- Run API staging: `npm run start:staging:api`
+- Run Admin staging: `npm run start:staging:admin`
+- Run mobile test public (Expo tunnel): `npm run start:staging:mobile`
+
 ## Comptes de demo seed
 - Admin: `admin@atlasgym.local` / `admin123`
 - Coach: `coach@atlasgym.local` / `coach123`

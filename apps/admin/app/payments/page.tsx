@@ -9,7 +9,7 @@ type Payment = {
   member?: { id: string; firstName: string; lastName: string } | null;
   subscription?: { id: string; name: string } | null;
   amountCents: number;
-  method: "MOBILE_MONEY" | "CARD" | "CASH";
+  method: "WAVE" | "ORANGE_MONEY" | "FREE_MONEY" | "MOBILE_MONEY" | "CARD" | "CASH";
   paidAt: string;
 };
 
@@ -34,11 +34,12 @@ export default function PaymentsPage() {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
 
   const [memberId, setMemberId] = useState("");
   const [subscriptionId, setSubscriptionId] = useState("");
   const [amountCents, setAmountCents] = useState("20000");
-  const [method, setMethod] = useState<Payment["method"]>("CARD");
+  const [method, setMethod] = useState<Payment["method"]>("WAVE");
 
   const loadData = () => {
     Promise.all([
@@ -89,21 +90,40 @@ export default function PaymentsPage() {
   const recordPayment = async (event: FormEvent) => {
     event.preventDefault();
     setError(null);
+    setCheckoutUrl(null);
     const amount = Number.parseInt(amountCents, 10);
     if (!memberId || !Number.isFinite(amount) || amount <= 0) {
       setError("Member and amount are required.");
       return;
     }
+    if ((method === "WAVE" || method === "ORANGE_MONEY" || method === "FREE_MONEY") && !subscriptionId) {
+      setError("A subscription is required to create a mobile money payment link.");
+      return;
+    }
 
     try {
       setSaving(true);
-      await adminPost("/payments", {
-        memberId,
-        subscriptionId: subscriptionId || undefined,
-        amountCents: amount,
-        method
-      });
-      setOpen(false);
+      if (method === "WAVE" || method === "ORANGE_MONEY" || method === "FREE_MONEY") {
+        const intent = await adminPost<{
+          id: string;
+          status: string;
+          checkoutUrl: string;
+        }>("/payments/intents", {
+          memberId,
+          subscriptionId,
+          amountCents: amount,
+          method
+        });
+        setCheckoutUrl(intent.checkoutUrl);
+      } else {
+        await adminPost("/payments", {
+          memberId,
+          subscriptionId: subscriptionId || undefined,
+          amountCents: amount,
+          method
+        });
+        setOpen(false);
+      }
       loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to record payment.");
@@ -161,14 +181,25 @@ export default function PaymentsPage() {
               value={method}
               onChange={(event) => setMethod(event.target.value as Payment["method"])}
             >
+              <option value="WAVE">WAVE</option>
+              <option value="ORANGE_MONEY">ORANGE_MONEY</option>
+              <option value="FREE_MONEY">FREE_MONEY</option>
               <option value="CARD">CARD</option>
               <option value="MOBILE_MONEY">MOBILE_MONEY</option>
               <option value="CASH">CASH</option>
             </select>
             {error && <p className="error-text">{error}</p>}
+            {checkoutUrl && (
+              <p className="success-text">
+                Payment link ready:{" "}
+                <a href={checkoutUrl} target="_blank" rel="noreferrer">
+                  open checkout
+                </a>
+              </p>
+            )}
             <div className="form-actions">
               <button className="btn" type="submit" disabled={saving}>
-                {saving ? "Saving..." : "Save payment"}
+                {saving ? "Saving..." : method === "CARD" || method === "CASH" ? "Save payment" : "Create payment link"}
               </button>
             </div>
           </form>

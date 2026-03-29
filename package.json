@@ -11,6 +11,13 @@
     "dev:admin": "npm --workspace apps/admin run dev",
     "dev:admin:clean": "npm --workspace apps/admin run dev:clean",
     "dev:mobile": "npm --workspace apps/mobile run start",
+    "build:staging": "bash scripts/staging-build.sh",
+    "start:staging:api": "bash scripts/staging-start-api.sh",
+    "start:staging:admin": "bash scripts/staging-start-admin.sh",
+    "start:staging:mobile": "bash scripts/staging-start-mobile.sh",
+    "staging:db:setup": "bash scripts/staging-db-setup.sh",
+    "staging:prepare": "bash scripts/staging-prepare.sh",
+    "test:tenant:isolation": "bash scripts/tenant-isolation.sh",
     "lint": "npm --workspace apps/api run lint && npm --workspace apps/admin run lint && npm --workspace apps/mobile run lint",
     "demo:deploy": "bash scripts/demo-build-deploy.sh"
   }

@@ -1,29 +1,33 @@
 import * as SecureStore from "expo-secure-store";
 
-const TOKEN_KEY = "GYM_AUTH_TOKEN";
+const ACCESS_TOKEN_KEY = "GYM_AUTH_TOKEN";
+const REFRESH_TOKEN_KEY = "GYM_AUTH_REFRESH_TOKEN";
 const ROLE_KEY = "GYM_AUTH_ROLE";
 
 export type MobileRole = "MEMBER" | "COACH" | "ADMIN";
 
 export type StoredSession = {
-  token: string;
+  accessToken: string;
+  refreshToken: string;
   role: MobileRole;
 };
 
 export async function saveSession(session: StoredSession) {
   await Promise.all([
-    SecureStore.setItemAsync(TOKEN_KEY, session.token),
+    SecureStore.setItemAsync(ACCESS_TOKEN_KEY, session.accessToken),
+    SecureStore.setItemAsync(REFRESH_TOKEN_KEY, session.refreshToken),
     SecureStore.setItemAsync(ROLE_KEY, session.role)
   ]);
 }
 
 export async function loadSession(): Promise<StoredSession | null> {
-  const [token, role] = await Promise.all([
-    SecureStore.getItemAsync(TOKEN_KEY),
+  const [accessToken, refreshToken, role] = await Promise.all([
+    SecureStore.getItemAsync(ACCESS_TOKEN_KEY),
+    SecureStore.getItemAsync(REFRESH_TOKEN_KEY),
     SecureStore.getItemAsync(ROLE_KEY)
   ]);
 
-  if (!token || !role) {
+  if (!accessToken || !refreshToken || !role) {
     return null;
   }
 
@@ -31,9 +35,13 @@ export async function loadSession(): Promise<StoredSession | null> {
     return null;
   }
 
-  return { token, role };
+  return { accessToken, refreshToken, role };
 }
 
 export async function clearSession() {
-  await Promise.all([SecureStore.deleteItemAsync(TOKEN_KEY), SecureStore.deleteItemAsync(ROLE_KEY)]);
+  await Promise.all([
+    SecureStore.deleteItemAsync(ACCESS_TOKEN_KEY),
+    SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY),
+    SecureStore.deleteItemAsync(ROLE_KEY)
+  ]);
 }

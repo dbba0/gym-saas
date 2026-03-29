@@ -1,7 +1,13 @@
 import { Router } from "express";
-import { registerAdmin, login, me, registerUser } from "../controllers/authController";
+import { logout, refreshSession, registerAdmin, login, me, registerUser } from "../controllers/authController";
 import { validate } from "../middleware/validate";
-import { loginSchema, registerAdminSchema, registerUserSchema } from "../validators/auth";
+import {
+  loginSchema,
+  logoutSchema,
+  refreshSessionSchema,
+  registerAdminSchema,
+  registerUserSchema
+} from "../validators/auth";
 import { requireAuth, requireGymContext, requireRole } from "../middleware/auth";
 
 const router = Router();
@@ -16,6 +22,8 @@ router.post(
   registerUser
 );
 router.post("/login", validate(loginSchema), login);
+router.post("/refresh", validate(refreshSessionSchema), refreshSession);
+router.post("/logout", validate(logoutSchema), logout);
 router.get("/me", requireAuth, me);
 
 export default router;

@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api";
+import { getServerApiUrl } from "../../../../lib/serverApiUrl";
 
 export async function POST(req: NextRequest) {
   try {
+    const API_URL = getServerApiUrl();
     const body = await req.text();
     const response = await fetch(`${API_URL}/auth/login`, {
       method: "POST",

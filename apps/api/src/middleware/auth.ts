@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response } from "express";
 import { verifyToken } from "../lib/jwt";
 import type { Role } from "@prisma/client";
+import jwt from "jsonwebtoken";
 
 export type AuthContext = {
   userId: string;
@@ -13,7 +14,7 @@ export type AuthRequest = Request & { auth?: AuthContext };
 export function requireAuth(req: AuthRequest, res: Response, next: NextFunction) {
   const header = req.headers.authorization;
   if (!header) {
-    return res.status(401).json({ message: "Missing authorization header" });
+    return res.status(401).json({ message: "Missing authorization header", code: "AUTH_MISSING" });
   }
   const token = header.replace("Bearer ", "");
   try {
@@ -21,7 +22,10 @@ export function requireAuth(req: AuthRequest, res: Response, next: NextFunction)
     req.auth = { userId: payload.sub, role: payload.role, gymId: payload.gymId };
     return next();
   } catch (err) {
-    return res.status(401).json({ message: "Invalid token" });
+    if (err instanceof jwt.TokenExpiredError) {
+      return res.status(401).json({ message: "Session expired", code: "AUTH_TOKEN_EXPIRED" });
+    }
+    return res.status(401).json({ message: "Invalid token", code: "AUTH_INVALID_TOKEN" });
   }
 }
 

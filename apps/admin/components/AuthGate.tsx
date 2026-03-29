@@ -2,8 +2,7 @@
 
 import { ReactNode, useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { getClientToken, setClientToken } from "../lib/adminClient";
-import { isTokenExpired } from "../lib/session";
+import { ensureAdminSession, getClientSession, logoutClient } from "../lib/adminClient";
 
 export default function AuthGate({ children }: { children: ReactNode }) {
   const router = useRouter();
@@ -18,22 +17,21 @@ export default function AuthGate({ children }: { children: ReactNode }) {
     }
     setReady(false);
 
-    const verify = () => {
-      const token = getClientToken();
-      if (!token || isTokenExpired(token)) {
-        setClientToken(null);
-        router.replace("/login");
-        return false;
+    const verify = async () => {
+      const hadSession = Boolean(getClientSession());
+      const ok = await ensureAdminSession();
+      if (!ok) {
+        await logoutClient();
+        router.replace(`/login?reason=${hadSession ? "expired" : "unauthorized"}`);
+        return;
       }
       setReady(true);
-      return true;
     };
 
-    if (!verify()) {
-      return;
-    }
-
-    const timer = setInterval(verify, 30000);
+    verify();
+    const timer = setInterval(() => {
+      verify();
+    }, 30000);
     return () => clearInterval(timer);
   }, [isPublicPath, pathname, router]);
 

@@ -80,10 +80,18 @@ export async function updateCoach(req: AuthRequest, res: Response) {
     return res.status(404).json({ message: "Coach not found" });
   }
 
-  const updatedCoach = await prisma.coach.update({
-    where: { id: req.params.id },
+  await prisma.coach.updateMany({
+    where: { id: coach.id, gymId: req.auth.gymId },
     data: req.body
   });
+
+  const updatedCoach = await prisma.coach.findFirst({
+    where: { id: coach.id, gymId: req.auth.gymId },
+    include: { members: true }
+  });
+  if (!updatedCoach) {
+    return res.status(404).json({ message: "Coach not found" });
+  }
   return res.json(updatedCoach);
 }
 
@@ -98,7 +106,9 @@ export async function deleteCoach(req: AuthRequest, res: Response) {
     return res.status(404).json({ message: "Coach not found" });
   }
 
-  await prisma.coach.delete({ where: { id: req.params.id } });
+  await prisma.coach.deleteMany({
+    where: { id: req.params.id, gymId: req.auth.gymId }
+  });
   return res.status(204).send();
 }
 

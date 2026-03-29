@@ -1,12 +1,25 @@
 import { isTokenExpired } from "./jwt";
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:4000/api";
+const API_URL = process.env.EXPO_PUBLIC_API_URL?.trim()?.replace(/\/$/, "");
+if (!API_URL) {
+  throw new Error("Missing EXPO_PUBLIC_API_URL. Set it in apps/mobile/.env or your EAS environment.");
+}
 
-let token: string | null = null;
+let accessToken: string | null = null;
+let refreshHandler: (() => Promise<boolean>) | null = null;
 let authFailureHandler: ((reason: "expired" | "unauthorized") => void) | null = null;
+let refreshInFlight: Promise<boolean> | null = null;
+
+export function getApiBaseUrl() {
+  return API_URL;
+}
 
 export function setToken(value: string | null) {
-  token = value;
+  accessToken = value;
+}
+
+export function setSessionRefreshHandler(handler: (() => Promise<boolean>) | null) {
+  refreshHandler = handler;
 }
 
 export function setAuthFailureHandler(handler: ((reason: "expired" | "unauthorized") => void) | null) {
@@ -15,9 +28,33 @@ export function setAuthFailureHandler(handler: ((reason: "expired" | "unauthoriz
 
 type ApiMethod = "GET" | "POST" | "PATCH" | "DELETE";
 
-async function request<T>(method: ApiMethod, path: string, body?: unknown): Promise<T> {
-  if (token && isTokenExpired(token)) {
-    token = null;
+async function refreshAccessToken() {
+  if (!refreshHandler) {
+    return false;
+  }
+  if (!refreshInFlight) {
+    refreshInFlight = refreshHandler().finally(() => {
+      refreshInFlight = null;
+    });
+  }
+  return refreshInFlight;
+}
+
+async function ensureActiveAccessToken() {
+  if (!accessToken) {
+    return false;
+  }
+  if (!isTokenExpired(accessToken)) {
+    return true;
+  }
+  const refreshed = await refreshAccessToken();
+  return refreshed && Boolean(accessToken) && !isTokenExpired(accessToken);
+}
+
+async function request<T>(method: ApiMethod, path: string, body?: unknown, retried = false): Promise<T> {
+  const hasActiveToken = await ensureActiveAccessToken();
+  if (!hasActiveToken && accessToken) {
+    accessToken = null;
     authFailureHandler?.("expired");
     throw new Error("Session expired. Please sign in again.");
   }
@@ -26,14 +63,21 @@ async function request<T>(method: ApiMethod, path: string, body?: unknown): Prom
     method,
     headers: {
       "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {})
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
     },
     body: body !== undefined ? JSON.stringify(body) : undefined
   });
 
+  if ((res.status === 401 || res.status === 403) && !retried && refreshHandler) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed && accessToken) {
+      return request<T>(method, path, body, true);
+    }
+  }
+
   if (res.status === 401 || res.status === 403) {
-    token = null;
-    authFailureHandler?.("unauthorized");
+    accessToken = null;
+    authFailureHandler?.(res.status === 401 ? "expired" : "unauthorized");
     throw new Error("Session expired. Please sign in again.");
   }
 

@@ -247,10 +247,17 @@ export async function updateMember(req: AuthRequest, res: Response) {
     }
   }
 
-  const updatedMember = await prisma.member.update({
-    where: { id: req.params.id },
+  await prisma.member.updateMany({
+    where: { id: req.params.id, gymId: req.auth.gymId },
     data: updateData
   });
+
+  const updatedMember = await prisma.member.findFirst({
+    where: { id: req.params.id, gymId: req.auth.gymId }
+  });
+  if (!updatedMember) {
+    return res.status(404).json({ message: "Member not found" });
+  }
   return res.json(updatedMember);
 }
 
@@ -266,7 +273,9 @@ export async function deleteMember(req: AuthRequest, res: Response) {
     return res.status(404).json({ message: "Member not found" });
   }
 
-  await prisma.member.delete({ where: { id: req.params.id } });
+  await prisma.member.deleteMany({
+    where: { id: req.params.id, gymId: req.auth.gymId }
+  });
   return res.status(204).send();
 }
 

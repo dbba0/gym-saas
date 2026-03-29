@@ -2,6 +2,7 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import Link from "next/link";
+import { logoutClient } from "../../lib/adminClient";
 import StepProgress from "./StepProgress";
 import PasswordStrength from "./PasswordStrength";
 import GymPreviewCard from "./GymPreviewCard";
@@ -15,7 +16,6 @@ import {
 } from "./types";
 
 const REGISTER_ENDPOINT = "/api/public/register-admin";
-const SUBSCRIPTIONS_ENDPOINT = "/api/admin/subscriptions";
 
 type Direction = "forward" | "backward";
 type FieldStatus = "idle" | "valid" | "invalid";
@@ -304,53 +304,6 @@ function InputField(props: {
   );
 }
 
-async function provisionInitialSubscriptions(token: string, data: AdminOnboardingData) {
-  let created = 0;
-  const warnings: string[] = [];
-
-  for (const subType of data.subscriptionTypes) {
-    const blueprint = SUBSCRIPTION_BLUEPRINTS[subType];
-    const monthlyPrice = BASE_MONTHLY_PRICE[data.currency];
-    const priceCents = Math.round(monthlyPrice * blueprint.multiplier);
-
-    const response = await fetch(SUBSCRIPTIONS_ENDPOINT, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`
-      },
-      body: JSON.stringify({
-        name: `${blueprint.name} (${data.currency})`,
-        durationMonths: blueprint.durationMonths,
-        priceCents
-      })
-    });
-
-    if (response.ok) {
-      created += 1;
-      continue;
-    }
-
-    const text = await response.text();
-    let message = `Could not create ${blueprint.name} plan.`;
-
-    try {
-      const payload = text ? JSON.parse(text) : null;
-      if (payload?.message) {
-        message = `${blueprint.name}: ${payload.message}`;
-      }
-    } catch {
-      if (text) {
-        message = `${blueprint.name}: ${text}`;
-      }
-    }
-
-    warnings.push(message);
-  }
-
-  return { created, warnings };
-}
-
 export default function AdminOnboardingWizard() {
   const [step, setStep] = useState<OnboardingStep>(0);
   const [direction, setDirection] = useState<Direction>("forward");
@@ -509,7 +462,14 @@ export default function AdminOnboardingWizard() {
         gymPhone: data.gymPhone.trim(),
         adminName: `${data.firstName.trim()} ${data.lastName.trim()}`.trim(),
         email: data.email.trim().toLowerCase(),
-        password: data.password
+        password: data.password,
+        setup: {
+          estimatedMembers: Number(data.estimatedMembers),
+          estimatedCoaches: Number(data.estimatedCoaches),
+          subscriptionTypes: data.subscriptionTypes,
+          currency: data.currency,
+          openingHours: data.openingHours.trim()
+        }
       };
 
       const registerResponse = await fetch(REGISTER_ENDPOINT, {
@@ -531,11 +491,6 @@ export default function AdminOnboardingWizard() {
         throw new Error(registerData?.message || "Unable to create your admin workspace.");
       }
 
-      const token = registerData?.token as string | undefined;
-      if (!token) {
-        throw new Error("Registration succeeded but session token is missing.");
-      }
-
       const setupPayload = {
         estimatedMembers: Number(data.estimatedMembers),
         estimatedCoaches: Number(data.estimatedCoaches),
@@ -551,8 +506,6 @@ export default function AdminOnboardingWizard() {
         }
       };
 
-      const provisioning = await provisionInitialSubscriptions(token, data);
-
       if (typeof window !== "undefined") {
         window.localStorage.setItem("GYM_SETUP_PAYLOAD", JSON.stringify(setupPayload));
       }
@@ -560,8 +513,9 @@ export default function AdminOnboardingWizard() {
       setSuccess({
         gymName: data.gymName,
         adminEmail: data.email,
-        subscriptionsCreated: provisioning.created,
-        warnings: provisioning.warnings,
+        subscriptionsCreated:
+          registerData?.onboarding?.subscriptionsCreated || registerPayload.setup.subscriptionTypes.length,
+        warnings: [],
         setupPayload
       });
     } catch (error) {
@@ -579,15 +533,11 @@ export default function AdminOnboardingWizard() {
     }
   };
 
-  const goToAdminLogin = () => {
+  const goToAdminLogin = async () => {
     if (typeof window === "undefined") {
       return;
     }
-    try {
-      window.localStorage.removeItem("GYM_ADMIN_TOKEN");
-    } catch {
-      // Ignore storage restrictions and continue navigation.
-    }
+    await logoutClient();
     window.location.assign("/login");
   };
 

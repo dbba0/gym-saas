@@ -1,79 +1,144 @@
 "use client";
 
-import { isTokenExpired } from "./session";
+import { decodeJwt, isTokenExpired, readStoredSession, writeStoredSession, type ClientSession } from "./session";
 
-let inMemoryToken: string | null = null;
+type AuthReason = "unauthorized" | "expired" | "forbidden";
 
-export function getClientToken() {
-  if (inMemoryToken) {
-    return inMemoryToken;
+type LoginPayload = {
+  token?: string;
+  accessToken?: string;
+  refreshToken?: string;
+  user?: { role?: string };
+};
+
+let inMemorySession: ClientSession | null = null;
+let refreshPromise: Promise<ClientSession | null> | null = null;
+
+function getSession() {
+  if (inMemorySession) {
+    return inMemorySession;
   }
-  if (typeof window === "undefined") {
-    return inMemoryToken;
+  const stored = readStoredSession();
+  if (stored) {
+    inMemorySession = stored;
   }
-  try {
-    const token = window.localStorage.getItem("GYM_ADMIN_TOKEN");
-    if (token) {
-      inMemoryToken = token;
-    }
-    return token;
-  } catch {
-    return inMemoryToken;
-  }
+  return stored;
 }
 
-export function setClientToken(token: string | null) {
-  inMemoryToken = token;
+function setSession(session: ClientSession | null) {
+  inMemorySession = session;
+  writeStoredSession(session);
+}
+
+function redirectToLogin(reason: AuthReason) {
   if (typeof window === "undefined") {
     return;
   }
-  try {
-    if (!token) {
-      window.localStorage.removeItem("GYM_ADMIN_TOKEN");
-      return;
-    }
-    window.localStorage.setItem("GYM_ADMIN_TOKEN", token);
-  } catch {
-    // Ignore storage failures (private mode / restricted environments).
-  }
-}
-
-function redirectToLogin() {
-  if (typeof window === "undefined") {
-    return;
-  }
+  const params = new URLSearchParams({ reason });
+  const next = `/login?${params.toString()}`;
   if (window.location.pathname !== "/login") {
-    window.location.href = "/login";
+    window.location.href = next;
+  } else if (window.location.search !== `?${params.toString()}`) {
+    window.history.replaceState(null, "", next);
   }
 }
 
-function getValidToken() {
-  const token = getClientToken();
-  if (!token) {
-    setClientToken(null);
-    redirectToLogin();
+async function refreshAccessToken(force = false) {
+  const currentSession = getSession();
+  if (!currentSession?.refreshToken) {
+    return null;
+  }
+
+  if (!force && !isTokenExpired(currentSession.accessToken)) {
+    return currentSession;
+  }
+
+  if (!refreshPromise) {
+    refreshPromise = (async () => {
+      try {
+        const response = await fetch("/api/public/refresh", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ refreshToken: currentSession.refreshToken })
+        });
+        const text = await response.text();
+        let payload: LoginPayload | Record<string, unknown> | null = null;
+        try {
+          payload = text ? (JSON.parse(text) as LoginPayload | Record<string, unknown>) : null;
+        } catch {
+          payload = null;
+        }
+
+        if (!response.ok) {
+          return null;
+        }
+
+        const accessToken =
+          typeof payload?.accessToken === "string"
+            ? payload.accessToken
+            : typeof payload?.token === "string"
+              ? payload.token
+              : null;
+        const refreshToken = typeof payload?.refreshToken === "string" ? payload.refreshToken : null;
+        if (!accessToken || !refreshToken) {
+          return null;
+        }
+
+        const next = { accessToken, refreshToken };
+        setSession(next);
+        return next;
+      } catch {
+        return null;
+      }
+    })().finally(() => {
+      refreshPromise = null;
+    });
+  }
+
+  return refreshPromise;
+}
+
+async function fetchWithAuth(
+  method: "GET" | "POST" | "PATCH",
+  path: string,
+  body?: unknown,
+  retried = false
+) {
+  let session = getSession();
+  if (!session) {
+    setSession(null);
+    redirectToLogin("unauthorized");
     throw new Error("Unauthorized");
   }
 
-  if (isTokenExpired(token)) {
-    setClientToken(null);
-    redirectToLogin();
-    throw new Error("Session expired. Please sign in again.");
+  if (isTokenExpired(session.accessToken)) {
+    const refreshed = await refreshAccessToken(true);
+    if (!refreshed) {
+      setSession(null);
+      redirectToLogin("expired");
+      throw new Error("Session expired. Please sign in again.");
+    }
+    session = refreshed;
   }
 
-  return token;
-}
-
-async function request<T>(method: "GET" | "POST" | "PATCH", path: string, body?: unknown) {
-  const token = getValidToken();
   const response = await fetch(`/api/admin${path}`, {
     method,
     headers: {
       "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {})
+      Authorization: `Bearer ${session.accessToken}`
     },
     body: body !== undefined ? JSON.stringify(body) : undefined
   });
+
+  if ((response.status === 401 || response.status === 403) && !retried) {
+    const refreshed = await refreshAccessToken(true);
+    if (refreshed) {
+      return fetchWithAuth(method, path, body, true);
+    }
+    setSession(null);
+    redirectToLogin(response.status === 403 ? "forbidden" : "expired");
+    throw new Error("Session expired. Please sign in again.");
+  }
 
   const text = await response.text();
   let payload: unknown = null;
@@ -81,12 +146,6 @@ async function request<T>(method: "GET" | "POST" | "PATCH", path: string, body?:
     payload = text ? JSON.parse(text) : null;
   } catch {
     payload = text;
-  }
-
-  if (response.status === 401 || response.status === 403) {
-    setClientToken(null);
-    redirectToLogin();
-    throw new Error("Session expired. Please sign in again.");
   }
 
   if (!response.ok) {
@@ -97,12 +156,80 @@ async function request<T>(method: "GET" | "POST" | "PATCH", path: string, body?:
     throw new Error(message);
   }
 
-  return payload as T;
+  return payload;
+}
+
+export function getClientToken() {
+  return getSession()?.accessToken || null;
+}
+
+export function setClientToken(token: string | null) {
+  if (!token) {
+    setSession(null);
+    return;
+  }
+  const previous = getSession();
+  setSession({
+    accessToken: token,
+    refreshToken: previous?.refreshToken || ""
+  });
+}
+
+export function getClientSession() {
+  return getSession();
+}
+
+export function setClientSession(accessToken: string, refreshToken: string) {
+  setSession({ accessToken, refreshToken });
+}
+
+export async function ensureAdminSession() {
+  let session = getSession();
+  if (!session) {
+    return false;
+  }
+
+  if (!session.refreshToken) {
+    setSession(null);
+    return false;
+  }
+
+  if (isTokenExpired(session.accessToken)) {
+    const refreshed = await refreshAccessToken(true);
+    if (!refreshed) {
+      setSession(null);
+      return false;
+    }
+    session = refreshed;
+  }
+
+  const payload = decodeJwt(session.accessToken);
+  if (payload?.role !== "ADMIN") {
+    setSession(null);
+    return false;
+  }
+  return true;
+}
+
+export async function logoutClient() {
+  const session = getSession();
+  if (session?.refreshToken) {
+    try {
+      await fetch("/api/public/logout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken: session.refreshToken })
+      });
+    } catch {
+      // ignore network errors while logging out
+    }
+  }
+  setSession(null);
 }
 
 export async function adminGet<T>(path: string, fallback: T): Promise<T> {
   try {
-    return await request<T>("GET", path);
+    return (await fetchWithAuth("GET", path)) as T;
   } catch (error) {
     if (error instanceof Error && /(Unauthorized|Session expired)/i.test(error.message)) {
       throw error;
@@ -112,25 +239,39 @@ export async function adminGet<T>(path: string, fallback: T): Promise<T> {
 }
 
 export async function adminPost<T>(path: string, body: unknown): Promise<T> {
-  return request<T>("POST", path, body);
+  return (await fetchWithAuth("POST", path, body)) as T;
 }
 
 export async function adminPatch<T>(path: string, body: unknown): Promise<T> {
-  return request<T>("PATCH", path, body);
+  return (await fetchWithAuth("PATCH", path, body)) as T;
 }
 
 export async function adminDownload(path: string, fallbackFilename: string) {
-  const token = getValidToken();
+  let session = getSession();
+  if (!session) {
+    redirectToLogin("unauthorized");
+    throw new Error("Unauthorized");
+  }
+  if (isTokenExpired(session.accessToken)) {
+    const refreshed = await refreshAccessToken(true);
+    if (!refreshed) {
+      setSession(null);
+      redirectToLogin("expired");
+      throw new Error("Session expired. Please sign in again.");
+    }
+    session = refreshed;
+  }
+
   const response = await fetch(`/api/admin${path}`, {
     method: "GET",
     headers: {
-      Authorization: `Bearer ${token}`
+      Authorization: `Bearer ${session.accessToken}`
     }
   });
 
   if (response.status === 401 || response.status === 403) {
-    setClientToken(null);
-    redirectToLogin();
+    setSession(null);
+    redirectToLogin(response.status === 403 ? "forbidden" : "expired");
     throw new Error("Session expired. Please sign in again.");
   }
   if (!response.ok) {

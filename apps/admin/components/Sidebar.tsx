@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { setClientToken } from "../lib/adminClient";
+import { logoutClient } from "../lib/adminClient";
 
 const navItems = [
   { href: "/", label: "Dashboard" },
@@ -18,8 +18,8 @@ const navItems = [
 export default function Sidebar({ active }: { active: string }) {
   const router = useRouter();
 
-  const logout = () => {
-    setClientToken(null);
+  const logout = async () => {
+    await logoutClient();
     router.replace("/login");
     router.refresh();
   };

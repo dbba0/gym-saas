@@ -1,5 +1,6 @@
 type JwtPayload = {
   exp?: number;
+  role?: "ADMIN" | "COACH" | "MEMBER";
 };
 
 function decodeBase64Url(value: string) {
