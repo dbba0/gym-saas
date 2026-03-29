@@ -1,0 +1,17 @@
+{
+  "name": "gym-saas",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev:api & npm run dev:admin & npm run dev:mobile",
+    "dev:api": "npm --workspace apps/api run dev",
+    "dev:admin": "npm --workspace apps/admin run dev",
+    "dev:admin:clean": "npm --workspace apps/admin run dev:clean",
+    "dev:mobile": "npm --workspace apps/mobile run start",
+    "lint": "npm --workspace apps/api run lint && npm --workspace apps/admin run lint && npm --workspace apps/mobile run lint",
+    "demo:deploy": "bash scripts/demo-build-deploy.sh"
+  }
+}

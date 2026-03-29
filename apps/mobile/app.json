@@ -1,0 +1,47 @@
+{
+  "expo": {
+    "name": "Atlas Gym",
+    "slug": "gym-saas",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./images/icon.png",
+    "scheme": "atlasgym",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./images/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#f7f4ee"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./images/adaptive-icon.png",
+        "backgroundColor": "#f7f4ee"
+      }
+    },
+    "web": {
+      "favicon": "./images/favicon.png"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "plugins": [
+      "expo-font",
+      "expo-secure-store"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "2cfcb089-b314-46d0-90e8-ce042e30d3b1"
+      }
+    },
+    "owner": "djibrilba05",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/2cfcb089-b314-46d0-90e8-ce042e30d3b1"
+    },
+    "ios": {
+      "supportsTablet": false
+    }
+  }
+}
