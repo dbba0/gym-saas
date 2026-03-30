@@ -55,10 +55,24 @@ export async function listAvailableProgramsForMember(gymId: string, userId: stri
     };
   }
 
+  const startedProgramRows = await prisma.attendance.groupBy({
+    by: ["programId"],
+    where: {
+      memberId: member.id,
+      source: "MANUAL",
+      programId: { not: null }
+    }
+  });
+
+  const startedProgramIds = startedProgramRows
+    .map((row) => row.programId)
+    .filter((programId): programId is string => Boolean(programId));
+
   const programs = await prisma.program.findMany({
     where: {
       gymId,
-      memberId: null
+      memberId: null,
+      id: startedProgramIds.length > 0 ? { notIn: startedProgramIds } : undefined
     },
     include: {
       coach: {

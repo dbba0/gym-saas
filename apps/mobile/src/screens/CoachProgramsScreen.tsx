@@ -246,227 +246,236 @@ export default function CoachProgramsScreen() {
 
   return (
     <Screen>
-      <View style={styles.header}>
-        <Text style={styles.title}>Programs</Text>
-        <Text style={styles.subtitle}>Create and assign plans</Text>
-      </View>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.header}>
+          <Text style={styles.title}>Programs</Text>
+          <Text style={styles.subtitle}>Create and assign plans</Text>
+        </View>
 
-      <TouchableOpacity style={styles.button} onPress={() => setCreateOpen((prev) => !prev)}>
-        <Text style={styles.buttonText}>{createOpen ? "Close" : "Create program"}</Text>
-      </TouchableOpacity>
+        <TouchableOpacity style={styles.button} onPress={() => setCreateOpen((prev) => !prev)}>
+          <Text style={styles.buttonText}>{createOpen ? "Close" : "Create program"}</Text>
+        </TouchableOpacity>
 
-      {createOpen && (
-        <Card tone="program">
-          <Text style={styles.formTitle}>New program</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Program title"
-            value={title}
-            onChangeText={setTitle}
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="Description (optional)"
-            value={description}
-            onChangeText={setDescription}
-          />
-
-          <Text style={styles.formLabel}>Assign member (optional)</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsRow}>
-            <TouchableOpacity
-              style={[styles.chip, !selectedMemberId && styles.chipActive]}
-              onPress={() => setSelectedMemberId(null)}
-            >
-              <Text style={[styles.chipText, !selectedMemberId && styles.chipTextActive]}>Not assigned</Text>
-            </TouchableOpacity>
-            {members.map((member) => (
-              <TouchableOpacity
-                key={member.id}
-                style={[styles.chip, selectedMemberId === member.id && styles.chipActive]}
-                onPress={() => setSelectedMemberId(member.id)}
-              >
-                <Text style={[styles.chipText, selectedMemberId === member.id && styles.chipTextActive]}>
-                  {member.firstName} {member.lastName}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-
-          <Text style={styles.formLabel}>First exercise (optional)</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Exercise name"
-            value={exerciseName}
-            onChangeText={setExerciseName}
-          />
-          <View style={styles.inlineInputs}>
-            <TextInput
-              style={[styles.input, styles.inlineInput]}
-              placeholder="Sets"
-              keyboardType="number-pad"
-              value={exerciseSets}
-              onChangeText={setExerciseSets}
-            />
-            <TextInput
-              style={[styles.input, styles.inlineInput]}
-              placeholder="Reps"
-              keyboardType="number-pad"
-              value={exerciseReps}
-              onChangeText={setExerciseReps}
-            />
-            <TextInput
-              style={[styles.input, styles.inlineInput]}
-              placeholder="Rest(s)"
-              keyboardType="number-pad"
-              value={exerciseRest}
-              onChangeText={setExerciseRest}
-            />
-          </View>
-
-          <TouchableOpacity
-            style={[styles.button, creating && styles.buttonDisabled]}
-            onPress={createProgram}
-            disabled={creating}
-          >
-            <Text style={styles.buttonText}>{creating ? "Creating..." : "Save program"}</Text>
-          </TouchableOpacity>
-        </Card>
-      )}
-
-      <View style={styles.list}>
-        {programs.map((item) => (
-          <Card key={item.id} tone="program">
-            <Text style={styles.programTitle}>{item.title}</Text>
-            <Text style={styles.programMeta}>
-              Member: {item.member ? `${item.member.firstName} ${item.member.lastName}` : "Not assigned"}
-            </Text>
-            <Text style={styles.programMeta}>Exercises: {item.exercises?.length || 0}</Text>
-
-            <TouchableOpacity
-              style={[styles.secondaryButton, assignViewProgramId === item.id && styles.secondaryButtonActive]}
-              onPress={() => openAssignView(item.id)}
-            >
-              <Text style={styles.secondaryButtonText}>
-                {assignViewProgramId === item.id ? "Close assignment" : "Assign to member"}
-              </Text>
-            </TouchableOpacity>
-
-            {assignViewProgramId === item.id && (
-              <View style={styles.assignPanel}>
-                <Text style={styles.assignTitle}>Assigner à un membre</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Rechercher un membre..."
-                  value={assignSearch}
-                  onChangeText={setAssignSearch}
-                />
-                {loadingAssignMembers ? <Text style={styles.programMeta}>Loading members...</Text> : null}
-                {assignError ? <Text style={styles.errorText}>{assignError}</Text> : null}
-
-                {filteredAssignMembers.map((member) => {
-                  const isLoadingThis = assigningTargetKey === `${item.id}:${member.id}`;
-                  return (
-                    <View key={`${item.id}:${member.id}`} style={styles.memberRow}>
-                      <View style={styles.memberIdentity}>
-                        <View style={styles.avatar}>
-                          <Text style={styles.avatarText}>{initials(member.firstName, member.lastName)}</Text>
-                        </View>
-                        <View style={styles.memberTextWrap}>
-                          <Text style={styles.memberName}>{member.firstName} {member.lastName}</Text>
-                          <Text style={styles.memberStatus}>{member.statusLabel}</Text>
-                        </View>
-                      </View>
-
-                      {member.isAssigned ? (
-                        <View style={styles.assignedBadge}>
-                          <Text style={styles.assignedBadgeText}>✓ Assigné</Text>
-                        </View>
-                      ) : (
-                        <TouchableOpacity
-                          style={[styles.assignButton, isLoadingThis && styles.buttonDisabled]}
-                          onPress={() => assignProgram(item.id, member.id)}
-                          disabled={isLoadingThis}
-                        >
-                          <Text style={styles.assignButtonText}>{isLoadingThis ? "..." : "Assigner"}</Text>
-                        </TouchableOpacity>
-                      )}
-                    </View>
-                  );
-                })}
-
-                {!loadingAssignMembers && filteredAssignMembers.length === 0 ? (
-                  <Text style={styles.programMeta}>No managed member found.</Text>
-                ) : null}
-
-                <Text style={styles.assignmentHint}>
-                  Le membre verra ce programme dans "Mes programmes".
-                </Text>
-              </View>
-            )}
-
-            <TouchableOpacity
-              style={[styles.secondaryButton, exerciseProgramId === item.id && styles.secondaryButtonActive]}
-              onPress={() => setExerciseProgramId((current) => (current === item.id ? null : item.id))}
-            >
-              <Text style={styles.secondaryButtonText}>
-                {exerciseProgramId === item.id ? "Close exercise form" : "Add exercise"}
-              </Text>
-            </TouchableOpacity>
-
-            {exerciseProgramId === item.id && (
-              <View style={styles.addExerciseBox}>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Exercise name"
-                  value={extraExerciseName}
-                  onChangeText={setExtraExerciseName}
-                />
-                <View style={styles.inlineInputs}>
-                  <TextInput
-                    style={[styles.input, styles.inlineInput]}
-                    placeholder="Sets"
-                    keyboardType="number-pad"
-                    value={extraExerciseSets}
-                    onChangeText={setExtraExerciseSets}
-                  />
-                  <TextInput
-                    style={[styles.input, styles.inlineInput]}
-                    placeholder="Reps"
-                    keyboardType="number-pad"
-                    value={extraExerciseReps}
-                    onChangeText={setExtraExerciseReps}
-                  />
-                  <TextInput
-                    style={[styles.input, styles.inlineInput]}
-                    placeholder="Rest(s)"
-                    keyboardType="number-pad"
-                    value={extraExerciseRest}
-                    onChangeText={setExtraExerciseRest}
-                  />
-                </View>
-                <TouchableOpacity
-                  style={[styles.button, addingExercise && styles.buttonDisabled]}
-                  onPress={saveExtraExercise}
-                  disabled={addingExercise}
-                >
-                  <Text style={styles.buttonText}>{addingExercise ? "Saving..." : "Save exercise"}</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </Card>
-        ))}
-
-        {programs.length === 0 && (
+        {createOpen && (
           <Card tone="program">
-            <Text style={styles.programMeta}>No programs created yet.</Text>
+            <Text style={styles.formTitle}>New program</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Program title"
+              value={title}
+              onChangeText={setTitle}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Description (optional)"
+              value={description}
+              onChangeText={setDescription}
+            />
+
+            <Text style={styles.formLabel}>Assign member (optional)</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsRow}>
+              <TouchableOpacity
+                style={[styles.chip, !selectedMemberId && styles.chipActive]}
+                onPress={() => setSelectedMemberId(null)}
+              >
+                <Text style={[styles.chipText, !selectedMemberId && styles.chipTextActive]}>Not assigned</Text>
+              </TouchableOpacity>
+              {members.map((member) => (
+                <TouchableOpacity
+                  key={member.id}
+                  style={[styles.chip, selectedMemberId === member.id && styles.chipActive]}
+                  onPress={() => setSelectedMemberId(member.id)}
+                >
+                  <Text style={[styles.chipText, selectedMemberId === member.id && styles.chipTextActive]}>
+                    {member.firstName} {member.lastName}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            <Text style={styles.formLabel}>First exercise (optional)</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Exercise name"
+              value={exerciseName}
+              onChangeText={setExerciseName}
+            />
+            <View style={styles.inlineInputs}>
+              <TextInput
+                style={[styles.input, styles.inlineInput]}
+                placeholder="Sets"
+                keyboardType="number-pad"
+                value={exerciseSets}
+                onChangeText={setExerciseSets}
+              />
+              <TextInput
+                style={[styles.input, styles.inlineInput]}
+                placeholder="Reps"
+                keyboardType="number-pad"
+                value={exerciseReps}
+                onChangeText={setExerciseReps}
+              />
+              <TextInput
+                style={[styles.input, styles.inlineInput]}
+                placeholder="Rest(s)"
+                keyboardType="number-pad"
+                value={exerciseRest}
+                onChangeText={setExerciseRest}
+              />
+            </View>
+
+            <TouchableOpacity
+              style={[styles.button, creating && styles.buttonDisabled]}
+              onPress={createProgram}
+              disabled={creating}
+            >
+              <Text style={styles.buttonText}>{creating ? "Creating..." : "Save program"}</Text>
+            </TouchableOpacity>
           </Card>
         )}
-      </View>
+
+        <View style={styles.list}>
+          {programs.map((item) => (
+            <Card key={item.id} tone="program">
+              <Text style={styles.programTitle}>{item.title}</Text>
+              <Text style={styles.programMeta}>
+                Member: {item.member ? `${item.member.firstName} ${item.member.lastName}` : "Not assigned"}
+              </Text>
+              <Text style={styles.programMeta}>Exercises: {item.exercises?.length || 0}</Text>
+
+              <TouchableOpacity
+                style={[styles.secondaryButton, assignViewProgramId === item.id && styles.secondaryButtonActive]}
+                onPress={() => openAssignView(item.id)}
+              >
+                <Text style={styles.secondaryButtonText}>
+                  {assignViewProgramId === item.id ? "Close assignment" : "Assign to member"}
+                </Text>
+              </TouchableOpacity>
+
+              {assignViewProgramId === item.id && (
+                <View style={styles.assignPanel}>
+                  <Text style={styles.assignTitle}>Assigner à un membre</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Rechercher un membre..."
+                    value={assignSearch}
+                    onChangeText={setAssignSearch}
+                  />
+                  {loadingAssignMembers ? <Text style={styles.programMeta}>Loading members...</Text> : null}
+                  {assignError ? <Text style={styles.errorText}>{assignError}</Text> : null}
+
+                  {filteredAssignMembers.map((member) => {
+                    const isLoadingThis = assigningTargetKey === `${item.id}:${member.id}`;
+                    return (
+                      <View key={`${item.id}:${member.id}`} style={styles.memberRow}>
+                        <View style={styles.memberIdentity}>
+                          <View style={styles.avatar}>
+                            <Text style={styles.avatarText}>{initials(member.firstName, member.lastName)}</Text>
+                          </View>
+                          <View style={styles.memberTextWrap}>
+                            <Text style={styles.memberName}>{member.firstName} {member.lastName}</Text>
+                            <Text style={styles.memberStatus}>{member.statusLabel}</Text>
+                          </View>
+                        </View>
+
+                        {member.isAssigned ? (
+                          <View style={styles.assignedBadge}>
+                            <Text style={styles.assignedBadgeText}>✓ Assigné</Text>
+                          </View>
+                        ) : (
+                          <TouchableOpacity
+                            style={[styles.assignButton, isLoadingThis && styles.buttonDisabled]}
+                            onPress={() => assignProgram(item.id, member.id)}
+                            disabled={isLoadingThis}
+                          >
+                            <Text style={styles.assignButtonText}>{isLoadingThis ? "..." : "Assigner"}</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    );
+                  })}
+
+                  {!loadingAssignMembers && filteredAssignMembers.length === 0 ? (
+                    <Text style={styles.programMeta}>No managed member found.</Text>
+                  ) : null}
+
+                  <Text style={styles.assignmentHint}>
+                    Le membre verra ce programme dans "Mes programmes".
+                  </Text>
+                </View>
+              )}
+
+              <TouchableOpacity
+                style={[styles.secondaryButton, exerciseProgramId === item.id && styles.secondaryButtonActive]}
+                onPress={() => setExerciseProgramId((current) => (current === item.id ? null : item.id))}
+              >
+                <Text style={styles.secondaryButtonText}>
+                  {exerciseProgramId === item.id ? "Close exercise form" : "Add exercise"}
+                </Text>
+              </TouchableOpacity>
+
+              {exerciseProgramId === item.id && (
+                <View style={styles.addExerciseBox}>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Exercise name"
+                    value={extraExerciseName}
+                    onChangeText={setExtraExerciseName}
+                  />
+                  <View style={styles.inlineInputs}>
+                    <TextInput
+                      style={[styles.input, styles.inlineInput]}
+                      placeholder="Sets"
+                      keyboardType="number-pad"
+                      value={extraExerciseSets}
+                      onChangeText={setExtraExerciseSets}
+                    />
+                    <TextInput
+                      style={[styles.input, styles.inlineInput]}
+                      placeholder="Reps"
+                      keyboardType="number-pad"
+                      value={extraExerciseReps}
+                      onChangeText={setExtraExerciseReps}
+                    />
+                    <TextInput
+                      style={[styles.input, styles.inlineInput]}
+                      placeholder="Rest(s)"
+                      keyboardType="number-pad"
+                      value={extraExerciseRest}
+                      onChangeText={setExtraExerciseRest}
+                    />
+                  </View>
+                  <TouchableOpacity
+                    style={[styles.button, addingExercise && styles.buttonDisabled]}
+                    onPress={saveExtraExercise}
+                    disabled={addingExercise}
+                  >
+                    <Text style={styles.buttonText}>{addingExercise ? "Saving..." : "Save exercise"}</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </Card>
+          ))}
+
+          {programs.length === 0 && (
+            <Card tone="program">
+              <Text style={styles.programMeta}>No programs created yet.</Text>
+            </Card>
+          )}
+        </View>
+      </ScrollView>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  scrollContent: {
+    paddingBottom: 26
+  },
   header: {
     marginBottom: 16
   },
